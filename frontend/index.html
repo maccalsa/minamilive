@@ -5,7 +5,8 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>POC HTMX + Alpine</title>
-  <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://unpkg.com/htmx-ext-ws@2.0.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script>
     function App() {
@@ -34,6 +35,52 @@
       }
     }
   </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('HTMX version:', htmx.version);
+      console.log('HTMX extensions:', htmx.extensions);
+      
+      let wsSocket;
+
+      htmx.on('htmx:wsConnecting', function(evt) {
+        console.log('🔄 Attempting WebSocket connection...', evt.detail);
+      });
+
+      htmx.on('htmx:wsOpen', function(evt) {
+        console.log('✅ WebSocket opened:', evt.detail.socketWrapper);
+        wsSocket = evt.detail.socketWrapper;
+      });
+
+      htmx.on('htmx:wsClose', function(evt) {
+        console.log('❌ WebSocket closed:', evt.detail.socketWrapper);
+        wsSocket = null;
+      });
+
+      htmx.on('htmx:wsError', function(evt) {
+        console.error('🚫 WebSocket error:', evt.detail.error);
+      });
+
+      htmx.on('htmx:wsBeforeMessage', function(evt) {
+        console.log('📥 Message received:', evt.detail.message);
+      });
+
+      htmx.on('htmx:wsAfterMessage', function(evt) {
+        console.log('📤 Message processed:', evt.detail.message);
+      });
+
+      // To send messages later (from the browser console or elsewhere):
+      window.sendWSMessage = function(msg) {
+        if (!wsSocket) {
+          console.error('🚫 WebSocket not initialized');
+          return;
+        }
+        
+        wsSocket.send(msg);
+        console.log('📨 Message sent:', msg);
+      }
+    });
+  </script>
 </head>
 
 <body x-data="App()" x-init="init()">
@@ -45,8 +92,9 @@
     Switch to <span x-text="state.preferences.theme === 'light' ? 'dark' : 'light'"></span> mode
   </button>
 
-  <div hx-ws="connect:ws://localhost:8000/ws/notifications">
+  <div hx-ext="ws" ws-connect="ws://localhost:8000/ws/notifications">
     <div id="notifications">No notifications yet.</div>
   </div>
+
 </body>
 </html>
