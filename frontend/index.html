@@ -23,14 +23,58 @@
         },
 
         loadUser() {
-          fetch('http://localhost:8000/api/me', { credentials: 'include' })
-            .then(res => res.json())
-            .then(data => { this.state.user = data; });
+          console.log('Loading user...');
+          fetch('/api/me', { 
+            credentials: 'include',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          })
+            .then(res => {
+              console.log('Response status:', res.status);
+              if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+              }
+              return res.json();
+            })
+            .then(data => { 
+              console.log('User data:', data);
+              this.state.user = data; 
+            })
+            .catch(error => {
+              console.error('Error loading user:', error);
+            });
         },
 
         toggleTheme() {
           this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
           localStorage.setItem('theme', this.state.preferences.theme);
+        },
+
+        login() {
+          console.log('Logging in...');
+          fetch('/api/login', { 
+            credentials: 'include',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          })
+            .then(res => {
+              console.log('Login response status:', res.status);
+              if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+              }
+              return res.json();
+            })
+            .then(() => {
+              console.log('Login successful, loading user...');
+              this.loadUser();
+            })
+            .catch(error => {
+              console.error('Error during login:', error);
+            });
         }
       }
     }
@@ -83,7 +127,7 @@
   </script>
 </head>
 
-<body x-data="App()" x-init="init()">
+<body x-data="App()" x-init="init()" hx-ext="ws">
   <nav>
     Welcome, <span x-text="state.user.name || 'Guest'"></span>
   </nav>
@@ -92,9 +136,11 @@
     Switch to <span x-text="state.preferences.theme === 'light' ? 'dark' : 'light'"></span> mode
   </button>
 
-  <div hx-ext="ws" ws-connect="ws://localhost:8000/ws/notifications">
+  <div ws-connect="ws://localhost:8000/ws/notifications">
     <div id="notifications">No notifications yet.</div>
   </div>
+
+  <button @click="login">Login</button>
 
 </body>
 </html>

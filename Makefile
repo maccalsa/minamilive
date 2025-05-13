@@ -13,5 +13,5 @@ run-backend:
 	uvicorn backend.main:app --reload --port=8000
 
 run-frontend:
-	cd frontend && python -m http.server 5500
+	cd frontend && python proxy_server.py
 
