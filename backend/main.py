@@ -1,6 +1,8 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import asyncio
+from fastapi import WebSocketDisconnect, WebSocket
 
 app = FastAPI()
 
@@ -22,16 +24,34 @@ def login(response: Response):
     response.set_cookie(key="sessionToken", value="secure-session-token", httponly=True, secure=False)
     return JSONResponse(content={"status": "logged in"})
 
-connected_clients = []
+connected_clients = set()
+
 
 @app.websocket("/ws/notifications")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    connected_clients.append(websocket)
+    connected_clients.add(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
-            response_html = f"<div hx-swap-oob='true' id='notifications'>Server says: {data}</div>"
-            await websocket.send_text(response_html)
+            await websocket.receive_text()  # ignoring incoming messages for now
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
+
+async def broadcast_notifications():
+    counter = 1
+    while True:
+        message = f"<div hx-swap-oob='true' id='notifications'>Server broadcast #{counter}</div>"
+        disconnected = set()
+        for client in connected_clients:
+            try:
+                await client.send_text(message)
+            except WebSocketDisconnect:
+                disconnected.add(client)
+        for client in disconnected:
+            connected_clients.remove(client)
+        counter += 1
+        await asyncio.sleep(5)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(broadcast_notifications())
