@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POC HTMX + Alpine</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script>
+    function App() {
+      return {
+        state: {
+          user: { name: '' },
+          preferences: {
+            theme: localStorage.getItem('theme') || 'light'
+          }
+        },
+
+        init() {
+          this.loadUser();
+        },
+
+        loadUser() {
+          fetch('http://localhost:8000/api/me', { credentials: 'include' })
+            .then(res => res.json())
+            .then(data => { this.state.user = data; });
+        },
+
+        toggleTheme() {
+          this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
+          localStorage.setItem('theme', this.state.preferences.theme);
+        }
+      }
+    }
+  </script>
+</head>
+
+<body x-data="App()" x-init="init()">
+  <nav>
+    Welcome, <span x-text="state.user.name || 'Guest'"></span>
+  </nav>
+
+  <button @click="toggleTheme">
+    Switch to <span x-text="state.preferences.theme === 'light' ? 'dark' : 'light'"></span> mode
+  </button>
+
+  <div hx-ws="connect:ws://localhost:8000/ws/notifications">
+    <div id="notifications">No notifications yet.</div>
+  </div>
+</body>
+</html>
