@@ -84,6 +84,17 @@ def login():
     )
     return response
 
+
+@app.get("/api/logout")
+def logout(response: Response):
+    '''
+    Logout endpoint - clears session cookie
+    '''
+    response = FastAPIResponse(content='{"status":"logged out"}', media_type="application/json")
+    response.delete_cookie(key="sessionToken", path="/")
+    return response
+
+
 connected_clients = set()
 
 @app.websocket("/ws/notifications")

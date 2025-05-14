@@ -75,6 +75,14 @@
             .catch(error => {
               console.error('Error during login:', error);
             });
+        },
+        logout() {
+          fetch('/api/logout', { credentials: 'include' })
+            .then(() => {
+              this.state.user = { name: '' };
+              console.log('Logged out successfully');
+            })
+            .catch(err => console.error('Logout failed:', err));
         }
       }
     }
@@ -141,6 +149,7 @@
   </div>
 
   <button @click="login">Login</button>
+  <button @click="logout">Logout</button>
 
 </body>
 </html>
