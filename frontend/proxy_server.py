@@ -1,6 +1,6 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from urllib.error import HTTPError
 import urllib.request
-import json
 from urllib.parse import urlparse
 
 class ProxyHandler(SimpleHTTPRequestHandler):
@@ -10,19 +10,19 @@ class ProxyHandler(SimpleHTTPRequestHandler):
         
         # If the path starts with /api, proxy to backend
         if parsed_path.path.startswith('/api'):
+            # Forward the request to the backend
+            backend_url = f'http://localhost:8000{self.path}'
+            print(f"Proxying request to: {backend_url}")
+            
+            # Create request with headers
+            req = urllib.request.Request(backend_url)
+            
+            # Forward all headers except host
+            for header in self.headers:
+                if header.lower() != 'host':
+                    req.add_header(header, self.headers[header])
+                    
             try:
-                # Forward the request to the backend
-                backend_url = f'http://localhost:8000{self.path}'
-                print(f"Proxying request to: {backend_url}")
-                
-                # Create request with headers
-                req = urllib.request.Request(backend_url)
-                
-                # Forward all headers except host
-                for header in self.headers:
-                    if header.lower() != 'host':
-                        req.add_header(header, self.headers[header])
-                
                 # Get response from backend
                 with urllib.request.urlopen(req) as response:
                     # Get response data
@@ -53,17 +53,29 @@ class ProxyHandler(SimpleHTTPRequestHandler):
                     # Send response body
                     self.wfile.write(response_data)
                 return
+            except HTTPError as e:
+                # Handle HTTP errors (401, 403, etc.)
+                error_body = e.read()
+                print(f"HTTP error from backend ({e.code}): {error_body.decode()}")
+                
+                self.send_response(e.code)
+                for header in e.headers.items():
+                    if header[0].lower() not in ['transfer-encoding', 'content-encoding', 'content-length']:
+                        self.send_header(header[0], header[1])
+                self.send_header('Content-Length', str(len(error_body)))
+                self.end_headers()
+                self.wfile.write(error_body)
             except Exception as e:
                 print(f"Error proxying request: {e}")
                 self.send_error(500, f"Error proxying request: {str(e)}")
-                return
+            return
         
         # For all other requests, serve static files
         return SimpleHTTPRequestHandler.do_GET(self)
 
-    def log_message(self, format, *args):
-        # Custom logging to see all requests
-        print(f"[{self.address_string()}] {format%args}")
+def log_message(self, format, *args):
+    # Custom logging to see all requests
+    print(f"[{self.address_string()}] {format%args}")
 
 def run(server_class=HTTPServer, handler_class=ProxyHandler, port=5500):
     server_address = ('', port)

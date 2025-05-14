@@ -8,81 +8,82 @@
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://unpkg.com/htmx-ext-ws@2.0.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-  <script>
-    function App() {
-      return {
-        state: {
-          user: { name: '' },
-          preferences: {
-            theme: localStorage.getItem('theme') || 'light'
+<script>
+function App() {
+  return {
+    state: {
+      user: { name: '' },
+      preferences: { theme: localStorage.getItem('theme') || 'light' },
+      sessionExpired: false  // track expiry state
+    },
+
+    init() {
+      this.loadUser();
+      this.startSessionMonitor();  // start periodic checks
+    },
+
+    loadUser() {
+      fetch('/api/me', { credentials: 'include' })
+        .then(res => {
+          if (res.status === 401) {
+            this.handleSessionExpiry();
+            throw new Error('Session expired');
           }
-        },
+          return res.json();
+        })
+        .then(data => {
+          this.state.user = data;
+          this.state.sessionExpired = false;
+        })
+        .catch(err => {
+          console.warn(err.message);
+        });
+    },
 
-        init() {
+    handleSessionExpiry() {
+      this.state.user = { name: '' };
+      this.state.sessionExpired = true;
+    },
+
+    login() {
+      fetch('/api/login', { credentials: 'include' })
+        .then(res => res.json())
+        .then(() => {
           this.loadUser();
-          setInterval(() => {
-            this.loadUser();
-          }, 60000); // checks every minute
-        },
+        });
+    },
 
-       loadUser() {
-          fetch('/api/me', { credentials: 'include' })
-            .then(res => {
-              if (res.status === 401) {
-                console.warn('Session expired or invalid.');
-                this.state.user = { name: '' };
-                return Promise.reject('Session expired');
-              }
-              return res.json();
-            })
-            .then(data => {
-              this.state.user = data;
-            })
-            .catch(err => {
-              console.warn('Re-authentication required:', err);
-            });
-        },
-
-        toggleTheme() {
-          this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
-          localStorage.setItem('theme', this.state.preferences.theme);
-        },
-
-        login() {
-          console.log('Logging in...');
-          fetch('/api/login', { 
-            credentials: 'include',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
+    startSessionMonitor() {
+      setInterval(() => {
+        fetch('/api/me', { credentials: 'include' })
+          .then(res => {
+            if (res.status === 401) {
+              this.handleSessionExpiry();
             }
-          })
-            .then(res => {
-              console.log('Login response status:', res.status);
-              if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-              }
-              return res.json();
-            })
-            .then(() => {
-              console.log('Login successful, loading user...');
-              this.loadUser();
-            })
-            .catch(error => {
-              console.error('Error during login:', error);
-            });
-        },
-        logout() {
-          fetch('/api/logout', { credentials: 'include' })
-            .then(() => {
-              this.state.user = { name: '' };
-              console.log('Logged out successfully');
-            })
-            .catch(err => console.error('Logout failed:', err));
-        }
-      }
+          });
+      }, 30000);  // check every 30 seconds
+    },
+
+    logout() {
+      fetch('/api/logout', { credentials: 'include' })
+        .then(() => {
+          this.handleSessionExpiry();
+        });
+    },
+
+    toggleTheme() {
+      this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
+      localStorage.setItem('theme', this.state.preferences.theme);
     }
-  </script>
+  };
+}
+</script>
+
+<!-- Update UI to clearly indicate session expiry -->
+<div x-show="state.sessionExpired">
+  ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
+</div>
+
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -144,12 +145,16 @@
     <div id="notifications">No notifications yet.</div>
   </div>
 
-  <button @click="login">Login</button>
-  <button @click="logout">Logout</button>
-
-  <div x-show="!state.user.name">
-    Your session expired. Please <button @click="login">Login</button> again.
+  <div x-show="state.sessionExpired">
+  ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
   </div>
+
+  <div x-show="!state.sessionExpired">
+    <button @click="login">log in</button>
+    <button @click="logout">Logout</button>
+  </div>
+
+
 
 </body>
 </html>
