@@ -20,30 +20,26 @@
 
         init() {
           this.loadUser();
+          setInterval(() => {
+            this.loadUser();
+          }, 60000); // checks every minute
         },
 
-        loadUser() {
-          console.log('Loading user...');
-          fetch('/api/me', { 
-            credentials: 'include',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
-          })
+       loadUser() {
+          fetch('/api/me', { credentials: 'include' })
             .then(res => {
-              console.log('Response status:', res.status);
-              if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
+              if (res.status === 401) {
+                console.warn('Session expired or invalid.');
+                this.state.user = { name: '' };
+                return Promise.reject('Session expired');
               }
               return res.json();
             })
-            .then(data => { 
-              console.log('User data:', data);
-              this.state.user = data; 
+            .then(data => {
+              this.state.user = data;
             })
-            .catch(error => {
-              console.error('Error loading user:', error);
+            .catch(err => {
+              console.warn('Re-authentication required:', err);
             });
         },
 
@@ -150,6 +146,10 @@
 
   <button @click="login">Login</button>
   <button @click="logout">Logout</button>
+
+  <div x-show="!state.user.name">
+    Your session expired. Please <button @click="login">Login</button> again.
+  </div>
 
 </body>
 </html>

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 SECRET_KEY = "super-secret-key"  # Replace with a secure environment variable
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1 # 60s for testing
 ALLOWED_ORIGINS = ["http://localhost:5500"]
 
 
