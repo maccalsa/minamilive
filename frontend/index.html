@@ -141,7 +141,7 @@ function App() {
     Switch to <span x-text="state.preferences.theme === 'light' ? 'dark' : 'light'"></span> mode
   </button>
 
-  <div ws-connect="ws://localhost:8000/ws/notifications">
+  <div ws-connect="wss://localhost/ws/notifications">
     <div id="notifications">No notifications yet.</div>
   </div>
 

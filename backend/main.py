@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 SECRET_KEY = "super-secret-key"  # Replace with a secure environment variable
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1 # 60s for testing
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 ALLOWED_ORIGINS = ["http://localhost:5500"]
 
 
@@ -77,8 +77,8 @@ def login():
         key="sessionToken",
         value=access_token,
         httponly=True,
-        secure=False,
-        samesite="none",
+        secure=True,
+        samesite="strict",
         path="/",
         max_age=3600
     )
