@@ -2,12 +2,17 @@
 ## python -m venv venv
 ## source venv/bin/activate
 
-
 init:
+	cd backend && python -m venv venv && source venv/bin/activate
+
+install:
 	cd backend && pip install -r requirements.txt
 
-requirements:
+freeze:
 	cd backend && pip freeze > requirements.txt
+
+uninstall:
+	cd backend && pip uninstall -r requirements.txt
 
 run-backend:
 	uvicorn backend.main:app --reload --port=8000

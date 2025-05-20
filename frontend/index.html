@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -8,123 +9,123 @@
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://unpkg.com/htmx-ext-ws@2.0.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script>
-function App() {
-  return {
-    state: {
-      user: { name: '' },
-      preferences: { theme: localStorage.getItem('theme') || 'light' },
-      sessionExpired: false  // track expiry state
-    },
+  <script>
+    function App() {
+      return {
+        state: {
+          user: { name: '' },
+          preferences: { theme: localStorage.getItem('theme') || 'light' },
+          sessionExpired: false  // track expiry state
+        },
 
-    init() {
-      this.loadUser();
-      this.startSessionMonitor();  // start periodic checks
-    },
-
-    loadUser() {
-      fetch('/api/me', { credentials: 'include' })
-        .then(res => {
-          if (res.status === 401) {
-            this.handleSessionExpiry();
-            throw new Error('Session expired');
-          }
-          return res.json();
-        })
-        .then(data => {
-          this.state.user = data;
-          this.state.sessionExpired = false;
-        })
-        .catch(err => {
-          console.warn(err.message);
-        });
-    },
-
-    handleSessionExpiry() {
-      this.state.user = { name: '' };
-      this.state.sessionExpired = true;
-    },
-
-    login() {
-      fetch('/api/login', { credentials: 'include' })
-        .then(res => res.json())
-        .then(() => {
+        init() {
           this.loadUser();
-        });
-    },
+          this.startSessionMonitor();  // start periodic checks
+        },
 
-    startSessionMonitor() {
-      setInterval(() => {
-        fetch('/api/me', { credentials: 'include' })
-          .then(res => {
-            if (res.status === 401) {
+        loadUser() {
+          fetch('/api/me', { credentials: 'include' })
+            .then(res => {
+              if (res.status === 401) {
+                this.handleSessionExpiry();
+                throw new Error('Session expired');
+              }
+              return res.json();
+            })
+            .then(data => {
+              this.state.user = data;
+              this.state.sessionExpired = false;
+            })
+            .catch(err => {
+              console.warn(err.message);
+            });
+        },
+
+        handleSessionExpiry() {
+          this.state.user = { name: '' };
+          this.state.sessionExpired = true;
+        },
+
+        login() {
+          fetch('/api/login', { credentials: 'include' })
+            .then(res => res.json())
+            .then(() => {
+              this.loadUser();
+            });
+        },
+
+        startSessionMonitor() {
+          setInterval(() => {
+            fetch('/api/me', { credentials: 'include' })
+              .then(res => {
+                if (res.status === 401) {
+                  this.handleSessionExpiry();
+                }
+              });
+          }, 30000);  // check every 30 seconds
+        },
+
+        logout() {
+          fetch('/api/logout', { credentials: 'include' })
+            .then(() => {
               this.handleSessionExpiry();
-            }
-          });
-      }, 30000);  // check every 30 seconds
-    },
+            });
+        },
 
-    logout() {
-      fetch('/api/logout', { credentials: 'include' })
-        .then(() => {
-          this.handleSessionExpiry();
-        });
-    },
-
-    toggleTheme() {
-      this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
-      localStorage.setItem('theme', this.state.preferences.theme);
+        toggleTheme() {
+          this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
+          localStorage.setItem('theme', this.state.preferences.theme);
+        }
+      };
     }
-  };
-}
-</script>
+  </script>
 
-<!-- Update UI to clearly indicate session expiry -->
-<div x-show="state.sessionExpired">
-  ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
-</div>
+  <!-- Update UI to clearly indicate session expiry -->
+  <div x-show="state.sessionExpired">
+    ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
+  </div>
 
 
   <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
       console.log('HTMX version:', htmx.version);
       console.log('HTMX extensions:', htmx.extensions);
-      
+
       let wsSocket;
 
-      htmx.on('htmx:wsConnecting', function(evt) {
+      htmx.on('htmx:wsConnecting', function (evt) {
         console.log('🔄 Attempting WebSocket connection...', evt.detail);
       });
 
-      htmx.on('htmx:wsOpen', function(evt) {
+      htmx.on('htmx:wsOpen', function (evt) {
         console.log('✅ WebSocket opened:', evt.detail.socketWrapper);
         wsSocket = evt.detail.socketWrapper;
       });
 
-      htmx.on('htmx:wsClose', function(evt) {
+      htmx.on('htmx:wsClose', function (evt) {
         console.log('❌ WebSocket closed:', evt.detail.socketWrapper);
         wsSocket = null;
       });
 
-      htmx.on('htmx:wsError', function(evt) {
+      htmx.on('htmx:wsError', function (evt) {
         console.error('🚫 WebSocket error:', evt.detail.error);
       });
 
-      htmx.on('htmx:wsBeforeMessage', function(evt) {
+      htmx.on('htmx:wsBeforeMessage', function (evt) {
         console.log('📥 Message received:', evt.detail.message);
       });
 
-      htmx.on('htmx:wsAfterMessage', function(evt) {
+      htmx.on('htmx:wsAfterMessage', function (evt) {
         console.log('📤 Message processed:', evt.detail.message);
       });
 
       // To send messages later (from the browser console or elsewhere):
-      window.sendWSMessage = function(msg) {
+      window.sendWSMessage = function (msg) {
         if (!wsSocket) {
           console.error('🚫 WebSocket not initialized');
           return;
         }
-        
+
         wsSocket.send(msg);
         console.log('📨 Message sent:', msg);
       }
@@ -141,12 +142,12 @@ function App() {
     Switch to <span x-text="state.preferences.theme === 'light' ? 'dark' : 'light'"></span> mode
   </button>
 
-  <div ws-connect="wss://localhost/ws/notifications">
+  <div ws-connect="/ws/notifications">
     <div id="notifications">No notifications yet.</div>
   </div>
 
   <div x-show="state.sessionExpired">
-  ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
+    ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
   </div>
 
   <div x-show="!state.sessionExpired">
@@ -157,4 +158,5 @@ function App() {
 
 
 </body>
+
 </html>

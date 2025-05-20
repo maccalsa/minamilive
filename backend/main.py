@@ -2,13 +2,18 @@ from fastapi import FastAPI, Request, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as FastAPIResponse
 import asyncio
-from jose import JWTError, jwt
+from jose import jwt, JWTError
 from datetime import datetime, timedelta
 
 SECRET_KEY = "super-secret-key"  # Replace with a secure environment variable
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
-ALLOWED_ORIGINS = ["http://localhost:5500"]
+ALLOWED_ORIGINS = [
+    "http://localhost:5500",
+    "http://localhost:8080",
+    "https://localhost:8443",
+    "http://localhost:8443"
+]
 
 
 app = FastAPI()
@@ -45,10 +50,10 @@ def get_user(request: Request):
     request: Request - the request object
     Returns: JSONResponse - the user's data
     '''
-    print("Cookies received:", request.cookies)
+    #print("Cookies received:", request.cookies)
     # Check for the session token in cookies
     session_token = request.cookies.get("sessionToken")
-    print("Session token:", session_token)
+    #print("Session token:", session_token)
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
