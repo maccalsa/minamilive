@@ -27,17 +27,26 @@
         },
 
         async init() {
-          // Load stored state clearly
           await this.loadPreferences();
-          this.loadUser();
+          await this.loadUserData();
+          await this.loadUser();
           this.startSessionMonitor();  // start periodic checks
         },
 
         async loadPreferences() {
           console.log('Loading preferences...');
-          const pref = await db.preferences.get('theme');
-          console.log('Preferences loaded:', pref);
-          if (pref) this.state.preferences.theme = pref.value;
+          try {
+            const pref = await db.preferences.get('theme');
+            console.log('Raw preference data:', pref);
+            if (pref && pref.value) {
+              this.state.preferences.theme = pref.value;
+              console.log('Preferences loaded:', pref.value);
+            } else {
+              console.log('No preference data found in IndexedDB');
+            }
+          } catch (e) {
+            console.error('Failed to load preferences:', e);
+          }
         },
 
         async savePreferences() {
@@ -46,54 +55,70 @@
           console.log('Preferences saved:', this.state.preferences.theme);
         },
 
+        async loadUserData() {
+          console.log('Loading user data...');
+          try {
+            const user = await db.userData.get('user');
+            console.log('Raw user data:', user);
+            if (user && user.value) {
+              this.state.user = user.value;
+              console.log('User data loaded:', user.value);
+            } else {
+              console.log('No user data found in IndexedDB');
+            }
+          } catch (e) {
+            console.error('Failed to load user data:', e);
+          }
+        },
 
-        loadUser() {
-          fetch('/api/me', { credentials: 'include' })
-            .then(res => {
-              if (res.status === 401) {
-                this.handleSessionExpiry();
-                throw new Error('Session expired');
-              }
-              return res.json();
-            })
-            .then(data => {
-              this.state.user = data;
-              this.state.sessionExpired = false;
-            })
-            .catch(err => {
-              console.warn(err.message);
-            });
+        async saveUserData() {
+          console.log('Saving user data...');
+          const userCopy = JSON.parse(JSON.stringify(this.state.user));
+          await db.userData.put({ key: 'user', value: userCopy });
+          console.log('User data saved:', userCopy);
+        },
+
+
+        async loadUser() {
+          const res = await fetch('/api/me', { credentials: 'include' });
+          if (res.status === 401) {
+            this.handleSessionExpiry();
+          } else {
+            const data = await res.json();
+            this.state.user = data;
+            await this.saveUserData();
+          }
         },
 
         handleSessionExpiry() {
           this.state.user = { name: '' };
           this.state.sessionExpired = true;
+          db.userData.clear(); // clear IndexedDB user data on expiry
         },
 
-        login() {
-          fetch('/api/login', { credentials: 'include' })
-            .then(res => res.json())
-            .then(() => {
-              this.loadUser();
-            });
+        async login() {
+          const res = await fetch('/api/login', { credentials: 'include' });
+          if (res.status === 200) {
+            console.log('Login successful');
+            await this.loadUser();
+          }
+          console.log('Login failed');
         },
 
         startSessionMonitor() {
-          setInterval(() => {
-            fetch('/api/me', { credentials: 'include' })
-              .then(res => {
-                if (res.status === 401) {
-                  this.handleSessionExpiry();
-                }
-              });
+          setInterval(async () => {
+            const res = await fetch('/api/me', { credentials: 'include' });
+            if (res.status === 401) {
+              this.handleSessionExpiry();
+            }
           }, 30000);  // check every 30 seconds
         },
 
-        logout() {
-          fetch('/api/logout', { credentials: 'include' })
-            .then(() => {
-              this.handleSessionExpiry();
-            });
+        async logout() {
+          const res = await fetch('/api/logout', { credentials: 'include' });
+          if (res.status === 200) {
+            this.handleSessionExpiry();
+          }
         },
 
         async toggleTheme() {
