@@ -6,22 +6,46 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>POC HTMX + Alpine</title>
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.4/dist/dexie.min.js"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://unpkg.com/htmx-ext-ws@2.0.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script>
+
+    const db = new Dexie('AppStateDB');
+    db.version(1).stores({
+      preferences: '&key, value',
+      userData: '&key, value'
+    });
+
     function App() {
       return {
         state: {
           user: { name: '' },
-          preferences: { theme: localStorage.getItem('theme') || 'light' },
-          sessionExpired: false  // track expiry state
+          preferences: { theme: 'light' },
+          sessionExpired: false
         },
 
-        init() {
+        async init() {
+          // Load stored state clearly
+          await this.loadPreferences();
           this.loadUser();
           this.startSessionMonitor();  // start periodic checks
         },
+
+        async loadPreferences() {
+          console.log('Loading preferences...');
+          const pref = await db.preferences.get('theme');
+          console.log('Preferences loaded:', pref);
+          if (pref) this.state.preferences.theme = pref.value;
+        },
+
+        async savePreferences() {
+          console.log('Saving preferences...');
+          await db.preferences.put({ key: 'theme', value: this.state.preferences.theme });
+          console.log('Preferences saved:', this.state.preferences.theme);
+        },
+
 
         loadUser() {
           fetch('/api/me', { credentials: 'include' })
@@ -72,9 +96,9 @@
             });
         },
 
-        toggleTheme() {
+        async toggleTheme() {
           this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
-          localStorage.setItem('theme', this.state.preferences.theme);
+          await this.savePreferences();
         }
       };
     }
