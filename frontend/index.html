@@ -6,180 +6,19 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>POC HTMX + Alpine</title>
+
+  <!-- External dependencies-->
   <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.4/dist/dexie.min.js"></script>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://unpkg.com/htmx-ext-ws@2.0.2"></script>
+
+  <!-- Application code-->
+  <script type="module" src="./js/app.js"></script>
+
+  <!-- AlpineJS loaded after the app.js script-->
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-  <script>
-
-    const db = new Dexie('AppStateDB');
-    db.version(1).stores({
-      preferences: '&key, value',
-      userData: '&key, value'
-    });
-
-    function App() {
-      return {
-        state: {
-          user: { name: '' },
-          preferences: { theme: 'light' },
-          sessionExpired: false
-        },
-
-        async init() {
-          await this.loadPreferences();
-          await this.loadUserData();
-          await this.loadUser();
-          this.startSessionMonitor();  // start periodic checks
-        },
-
-        async loadPreferences() {
-          console.log('Loading preferences...');
-          try {
-            const pref = await db.preferences.get('theme');
-            console.log('Raw preference data:', pref);
-            if (pref && pref.value) {
-              this.state.preferences.theme = pref.value;
-              console.log('Preferences loaded:', pref.value);
-            } else {
-              console.log('No preference data found in IndexedDB');
-            }
-          } catch (e) {
-            console.error('Failed to load preferences:', e);
-          }
-        },
-
-        async savePreferences() {
-          console.log('Saving preferences...');
-          await db.preferences.put({ key: 'theme', value: this.state.preferences.theme });
-          console.log('Preferences saved:', this.state.preferences.theme);
-        },
-
-        async loadUserData() {
-          console.log('Loading user data...');
-          try {
-            const user = await db.userData.get('user');
-            console.log('Raw user data:', user);
-            if (user && user.value) {
-              this.state.user = user.value;
-              console.log('User data loaded:', user.value);
-            } else {
-              console.log('No user data found in IndexedDB');
-            }
-          } catch (e) {
-            console.error('Failed to load user data:', e);
-          }
-        },
-
-        async saveUserData() {
-          console.log('Saving user data...');
-          const userCopy = JSON.parse(JSON.stringify(this.state.user));
-          await db.userData.put({ key: 'user', value: userCopy });
-          console.log('User data saved:', userCopy);
-        },
 
 
-        async loadUser() {
-          const res = await fetch('/api/me', { credentials: 'include' });
-          if (res.status === 401) {
-            this.handleSessionExpiry();
-          } else {
-            const data = await res.json();
-            this.state.user = data;
-            await this.saveUserData();
-          }
-        },
-
-        handleSessionExpiry() {
-          this.state.user = { name: '' };
-          this.state.sessionExpired = true;
-          db.userData.clear(); // clear IndexedDB user data on expiry
-        },
-
-        async login() {
-          const res = await fetch('/api/login', { credentials: 'include' });
-          if (res.status === 200) {
-            console.log('Login successful');
-            await this.loadUser();
-          }
-          console.log('Login failed');
-        },
-
-        startSessionMonitor() {
-          setInterval(async () => {
-            const res = await fetch('/api/me', { credentials: 'include' });
-            if (res.status === 401) {
-              this.handleSessionExpiry();
-            }
-          }, 30000);  // check every 30 seconds
-        },
-
-        async logout() {
-          const res = await fetch('/api/logout', { credentials: 'include' });
-          if (res.status === 200) {
-            this.handleSessionExpiry();
-          }
-        },
-
-        async toggleTheme() {
-          this.state.preferences.theme = this.state.preferences.theme === 'light' ? 'dark' : 'light';
-          await this.savePreferences();
-        }
-      };
-    }
-  </script>
-
-  <!-- Update UI to clearly indicate session expiry -->
-  <div x-show="state.sessionExpired">
-    ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
-  </div>
-
-
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      console.log('HTMX version:', htmx.version);
-      console.log('HTMX extensions:', htmx.extensions);
-
-      let wsSocket;
-
-      htmx.on('htmx:wsConnecting', function (evt) {
-        console.log('🔄 Attempting WebSocket connection...', evt.detail);
-      });
-
-      htmx.on('htmx:wsOpen', function (evt) {
-        console.log('✅ WebSocket opened:', evt.detail.socketWrapper);
-        wsSocket = evt.detail.socketWrapper;
-      });
-
-      htmx.on('htmx:wsClose', function (evt) {
-        console.log('❌ WebSocket closed:', evt.detail.socketWrapper);
-        wsSocket = null;
-      });
-
-      htmx.on('htmx:wsError', function (evt) {
-        console.error('🚫 WebSocket error:', evt.detail.error);
-      });
-
-      htmx.on('htmx:wsBeforeMessage', function (evt) {
-        console.log('📥 Message received:', evt.detail.message);
-      });
-
-      htmx.on('htmx:wsAfterMessage', function (evt) {
-        console.log('📤 Message processed:', evt.detail.message);
-      });
-
-      // To send messages later (from the browser console or elsewhere):
-      window.sendWSMessage = function (msg) {
-        if (!wsSocket) {
-          console.error('🚫 WebSocket not initialized');
-          return;
-        }
-
-        wsSocket.send(msg);
-        console.log('📨 Message sent:', msg);
-      }
-    });
-  </script>
 </head>
 
 <body x-data="App()" x-init="init()" hx-ext="ws">
@@ -191,21 +30,21 @@
     Switch to <span x-text="state.preferences.theme === 'light' ? 'dark' : 'light'"></span> mode
   </button>
 
+  <!-- WebSocket Integration -->
   <div ws-connect="/ws/notifications">
     <div id="notifications">No notifications yet.</div>
   </div>
 
+  <!-- Session Expiry UI -->
   <div x-show="state.sessionExpired">
     ⚠️ Your session has expired. Please <button @click="login">log in</button> again.
   </div>
 
+  <!-- Login / Logout UI -->
   <div x-show="!state.sessionExpired">
-    <button @click="login">log in</button>
+    <button @click="login">Log in</button>
     <button @click="logout">Logout</button>
   </div>
-
-
-
 </body>
 
 </html>
