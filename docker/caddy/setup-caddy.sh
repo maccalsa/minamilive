@@ -2,7 +2,6 @@
 
 set -e
 
-# Helper functions
 prompt_choice() {
   PS3="$1: "
   shift
@@ -16,96 +15,152 @@ prompt_port() {
   echo "${input:-$2}"
 }
 
-create_caddyfile_local() {
-  cat << EOF > ./Caddyfile
+prompt_text() {
+  read -rp "$1: " input
+  echo "$input"
+}
+
+create_caddyfile() {
+  local env_type=$1
+
+  if [ "$env_type" == "Development" ]; then
+    cat <<EOF > ./Caddyfile
 :${HTTP_PORT} {
-  reverse_proxy localhost:${FRONTEND_PORT}
+  reverse_proxy ${FRONTEND_HOST}:${FRONTEND_PORT}
 }
 
 localhost:${HTTPS_PORT} {
   tls internal
 
-  reverse_proxy /api/* localhost:${BACKEND_PORT}
+  reverse_proxy /api/* ${BACKEND_HOST}:${BACKEND_PORT}
 
-  reverse_proxy /ws/* localhost:${BACKEND_PORT} {
+  reverse_proxy /ws/* ${BACKEND_HOST}:${BACKEND_PORT} {
     header_up Connection {http.request.header.Connection}
     header_up Upgrade {http.request.header.Upgrade}
   }
 
-  reverse_proxy localhost:${FRONTEND_PORT}
+  reverse_proxy ${FRONTEND_HOST}:${FRONTEND_PORT}
 }
 EOF
-}
+  else
+    cat <<EOF > ./Caddyfile
+${DOMAIN} {
+  encode gzip
 
-create_caddyfile_docker() {
-  cat << EOF > ./Caddyfile
-:${HTTP_PORT} {
-  reverse_proxy frontend:${FRONTEND_PORT}
-}
-
-localhost:${HTTPS_PORT} {
-  tls internal
-
-  reverse_proxy /api/* backend:${BACKEND_PORT}
-
-  reverse_proxy /ws/* backend:${BACKEND_PORT} {
-    header_up Connection {http.request.header.Connection}
-    header_up Upgrade {http.request.header.Upgrade}
+  log {
+    output file /var/log/caddy/access.log {
+      roll_size 100mb
+      roll_keep 7
+      roll_keep_for 168h
+    }
+    format json
   }
 
-  reverse_proxy frontend:${FRONTEND_PORT}
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Content-Security-Policy "default-src 'self'"
+  }
+
+  rate_limit {
+    zone api_limit {
+      key {remote_host}
+      window 1m
+      events 100
+    }
+  }
+
+  handle /api/* {
+    rate_limit api_limit
+    reverse_proxy ${BACKEND_HOST}:${BACKEND_PORT}
+  }
+
+  handle /ws/* {
+    reverse_proxy ${BACKEND_HOST}:${BACKEND_PORT} {
+      header_up Connection {http.request.header.Connection}
+      header_up Upgrade {http.request.header.Upgrade}
+    }
+  }
+
+  handle {
+    reverse_proxy ${FRONTEND_HOST}:${FRONTEND_PORT}
+  }
+
+  handle_errors {
+    respond "{http.error.status_code} {http.error.status_text}"
+  }
+
+  metrics /metrics
 }
 EOF
+  fi
 }
 
-run_caddy_local() {
-  docker run -d \
-    --name caddy-proxy \
-    --network host \
-    -v "$(pwd)/Caddyfile:/etc/caddy/Caddyfile:ro" \
-    caddy:latest
+build_custom_caddy() {
+  cat <<EOF > ./Dockerfile
+FROM caddy:2-builder AS builder
+RUN xcaddy build --with github.com/mholt/caddy-ratelimit
+
+FROM caddy:2
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+EOF
+
+  docker build -t custom-caddy:latest .
 }
 
-run_caddy_docker() {
-  docker network create caddy-net || true
-
-  docker run -d --name backend --network caddy-net -p "${BACKEND_PORT}:${BACKEND_PORT}" your-backend-image
-  docker run -d --name frontend --network caddy-net -p "${FRONTEND_PORT}:${FRONTEND_PORT}" your-frontend-image
+run_caddy() {
+  docker rm -f caddy-proxy >/dev/null 2>&1 || true
 
   docker run -d \
     --name caddy-proxy \
-    --network caddy-net \
+    --network "$NETWORK" \
     -v "$(pwd)/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    -v caddy_data:/data \
+    -v caddy_config:/config \
+    -v "$(pwd)/logs:/var/log/caddy" \
     -p "${HTTP_PORT}:${HTTP_PORT}" \
     -p "${HTTPS_PORT}:${HTTPS_PORT}" \
-    caddy:latest
+    $([ "$ENV_TYPE" == "Production" ] && echo "custom-caddy:latest" || echo "caddy:latest")
 }
 
 # Begin Wizard
 echo "🚀 Caddy Docker Proxy Setup Wizard"
 
 SETUP_TYPE=$(prompt_choice "Select setup type" \
-  "Local Services (services running on your host machine)" \
-  "Docker Services (services running as Docker containers)")
+  "Local Services" \
+  "Docker Services")
 
-echo "🛠 Setup: $SETUP_TYPE"
+ENV_TYPE=$(prompt_choice "Select environment type" "Development" "Production")
 
-# Prompt for ports
-HTTP_PORT=$(prompt_port "HTTP port" "8080")
-HTTPS_PORT=$(prompt_port "HTTPS port" "8443")
+if [ "$ENV_TYPE" == "Production" ]; then
+  DOMAIN=$(prompt_text "Enter your domain (e.g., example.com)")
+  FRONTEND_HOST=$(prompt_text "Enter frontend host (IP or hostname)")
+  BACKEND_HOST=$(prompt_text "Enter backend host (IP or hostname)")
+else
+  FRONTEND_HOST=$([ "$SETUP_TYPE" == "Local Services" ] && echo "localhost" || echo "frontend")
+  BACKEND_HOST=$([ "$SETUP_TYPE" == "Local Services" ] && echo "localhost" || echo "backend")
+fi
+
+NETWORK=$([ "$SETUP_TYPE" == "Local Services" ] && echo "host" || echo "caddy-net")
+
+HTTP_PORT=$(prompt_port "HTTP port" "80")
+HTTPS_PORT=$(prompt_port "HTTPS port" "443")
 FRONTEND_PORT=$(prompt_port "Frontend service port" "5500")
 BACKEND_PORT=$(prompt_port "Backend service port" "8000")
 
-# Confirm ports
-echo ""
-echo "🔧 Configuration:"
+# Confirm configuration
+echo "\n🔧 Configuration:"
+echo "Environment: $ENV_TYPE"
+[ "$ENV_TYPE" == "Production" ] && echo "Domain: $DOMAIN"
 echo "HTTP Port: $HTTP_PORT"
 echo "HTTPS Port: $HTTPS_PORT"
-echo "Frontend Port: $FRONTEND_PORT"
-echo "Backend Port: $BACKEND_PORT"
-echo ""
+echo "Frontend: $FRONTEND_HOST:$FRONTEND_PORT"
+echo "Backend: $BACKEND_HOST:$BACKEND_PORT"
 
-# Confirm and proceed
+echo ""
 read -rp "Proceed with this configuration? [Y/n]: " confirm
 confirm=${confirm:-Y}
 if [[ ! $confirm =~ ^[Yy]$ ]]; then
@@ -113,22 +168,18 @@ if [[ ! $confirm =~ ^[Yy]$ ]]; then
   exit 1
 fi
 
-# Remove existing container if any
-docker rm -f caddy-proxy frontend backend >/dev/null 2>&1 || true
-
-# Generate Caddyfile and run containers based on choice
-if [[ $SETUP_TYPE == "Local Services (services running on your host machine)" ]]; then
-  echo "Creating Caddyfile for local host services..."
-  create_caddyfile_local
-  echo "Running Caddy container for local services..."
-  run_caddy_local
-else
-  echo "Creating Caddyfile for Docker-based services..."
-  create_caddyfile_docker
-  echo "Running service and Caddy containers..."
-  run_caddy_docker
+# Docker network setup if needed
+if [ "$SETUP_TYPE" == "Docker Services" ]; then
+  docker network create caddy-net || true
+  docker rm -f backend frontend >/dev/null 2>&1 || true
+  docker run -d --name backend --network caddy-net -p "${BACKEND_PORT}:${BACKEND_PORT}" your-backend-image
+  docker run -d --name frontend --network caddy-net -p "${FRONTEND_PORT}:${FRONTEND_PORT}" your-frontend-image
 fi
 
-echo "✅ Setup complete! Access your app:"
-echo "👉 HTTP: http://localhost:${HTTP_PORT}"
-echo "👉 HTTPS: https://localhost:${HTTPS_PORT}"
+# Generate, build, and run Caddy
+[ "$ENV_TYPE" == "Production" ] && build_custom_caddy
+create_caddyfile "$ENV_TYPE"
+run_caddy
+
+# Output final message
+echo "✅ Setup complete! Access your app at https://${DOMAIN:-localhost}"
