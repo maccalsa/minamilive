@@ -22,16 +22,16 @@ create_caddyfile_local() {
   reverse_proxy localhost:${FRONTEND_PORT}
 }
 
-:${HTTPS_PORT} {
+localhost:${HTTPS_PORT} {
+  tls internal
+
   reverse_proxy /api/* localhost:${BACKEND_PORT}
+
   reverse_proxy /ws/* localhost:${BACKEND_PORT} {
-    header_up Connection {>Connection}
-    header_up Upgrade {>Upgrade}
-    header_up Sec-WebSocket-Key {>Sec-WebSocket-Key}
-    header_up Sec-WebSocket-Version {>Sec-WebSocket-Version}
-    header_up Sec-WebSocket-Extensions {>Sec-WebSocket-Extensions}
-    header_up Sec-WebSocket-Protocol {>Sec-WebSocket-Protocol}
+    header_up Connection {http.request.header.Connection}
+    header_up Upgrade {http.request.header.Upgrade}
   }
+
   reverse_proxy localhost:${FRONTEND_PORT}
 }
 EOF
@@ -43,16 +43,16 @@ create_caddyfile_docker() {
   reverse_proxy frontend:${FRONTEND_PORT}
 }
 
-:${HTTPS_PORT} {
+localhost:${HTTPS_PORT} {
+  tls internal
+
   reverse_proxy /api/* backend:${BACKEND_PORT}
+
   reverse_proxy /ws/* backend:${BACKEND_PORT} {
-    header_up Connection {>Connection}
-    header_up Upgrade {>Upgrade}
-    header_up Sec-WebSocket-Key {>Sec-WebSocket-Key}
-    header_up Sec-WebSocket-Version {>Sec-WebSocket-Version}
-    header_up Sec-WebSocket-Extensions {>Sec-WebSocket-Extensions}
-    header_up Sec-WebSocket-Protocol {>Sec-WebSocket-Protocol}
+    header_up Connection {http.request.header.Connection}
+    header_up Upgrade {http.request.header.Upgrade}
   }
+
   reverse_proxy frontend:${FRONTEND_PORT}
 }
 EOF
@@ -63,8 +63,6 @@ run_caddy_local() {
     --name caddy-proxy \
     --network host \
     -v "$(pwd)/Caddyfile:/etc/caddy/Caddyfile:ro" \
-    -p "${HTTP_PORT}:${HTTP_PORT}" \
-    -p "${HTTPS_PORT}:${HTTPS_PORT}" \
     caddy:latest
 }
 

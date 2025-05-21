@@ -2,6 +2,15 @@
 ## python -m venv venv
 ## source venv/bin/activate
 
+wscat-install:
+	sudo apt install wscat
+
+wscat-test-backend-host:
+	wscat -c wss://localhost:8443/ws/notifications --no-check 
+
+wscat-test-backend-container:
+	wscat -c wss://localhost:8433/ws/notifications --no-check 
+
 init:
 	cd backend && python -m venv venv && source venv/bin/activate
 
@@ -44,6 +53,9 @@ caddy-format:
 caddy-listening:
 	# sudo lsof -i :8443 -sTCP:LISTEN
 	sudo lsof -i -P -n | grep LISTEN
+
+caddy-cat-caddyfile:
+	docker exec caddy-proxy cat /etc/caddy/Caddyfile
 
 debug-what-certificates-are-being-sent:
 	  openssl s_client -connect localhost:8443 -CAfile ~/.local/share/caddy/pki/authorities/local/root.crt -showcerts
